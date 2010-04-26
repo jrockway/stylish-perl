@@ -1,13 +1,21 @@
 use MooseX::Declare;
 
 class Stylish::Server::Session {
-    use JSON::XS;
-    use Try::Tiny;
-    use Set::Object;
-    use AnyEvent::REPL;
-    use Scalar::Util qw(refaddr);
+
+    use Stylish::Types qw(REPL);
+    use MooseX::Types::Moose qw(HashRef);
     use MooseX::Types::Path::Class qw(Dir);
+
+    use AnyEvent::REPL;
     use Coro;
+    use JSON::XS;
+    use Scalar::Util qw(refaddr);
+    use Set::Object;
+    use Try::Tiny;
+
+    use Stylish::Project;
+    use Stylish::REPL::Project;
+
     use feature 'switch';
 
     has 'id' => (
@@ -42,7 +50,7 @@ class Stylish::Server::Session {
 
     has 'repls' => (
         is         => 'ro',
-        isa        => 'HashRef[AnyEvent::REPL]',
+        isa        => HashRef[REPL],
         default    => sub { {} },
         traits     => ['Hash'],
         handles => {
@@ -106,8 +114,27 @@ class Stylish::Server::Session {
         $_->cancel for @coros;
     }
 
-    method register_project(Str $name, Dir $root does coerce) {
+    method project_change(Stylish::Project $project, Str $name){
+        # git snapshot
+        # rebuild tags table
+    }
 
+    method register_project(Str $name, Dir $root, CodeRef $on_output, CodeRef $on_repl) {
+        my $project; $project = Stylish::Project->new(
+            root      => $root,
+            on_change => [ sub { $self->project_change($project, $name) } ],
+        );
+        $self->add_project($project);
+
+        my $repl = Stylish::REPL::Project->new(
+            project        => $project,
+            on_output      => $on_output,
+            on_repl_change => $on_repl,
+        );
+
+        $self->add_repl($name, $repl);
+
+        return 1;
     }
 
     method repl(Str $repl_name, Str $code, CodeRef $on_output){
@@ -172,6 +199,25 @@ class Stylish::Server::Session {
                     $args->{input} || die 'need input',
                 );
                 return 1;
+            }
+            when('register_project'){
+                my $dir = Path::Class::dir($args->{root} || die 'need root');
+                my $name = $args->{name} || $dir->basename;
+                return $self->register_project(
+                    $name, $dir,
+                    sub {
+                        $respond_cb->( 'repl_output', {
+                            data => join('', @_),
+                            repl => $name,
+                        });
+                    },
+                    sub {
+                        $respond_cb->( 'repl_generation_change', {
+                            generation => $_[0],
+                            repl       => $name,
+                        });
+                    },
+                );
             }
             default {
                 die "unknown command '$cmd'";
