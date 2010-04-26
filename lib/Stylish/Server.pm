@@ -11,6 +11,7 @@ class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
     use Set::Object;
 
     our $VERSION = '0.00_01';
+    our $_SERVER;
 
     has 'server' => (
         is         => 'ro',
@@ -43,10 +44,13 @@ class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
             $session->run;
             $self->unregister_session($session);
             $self->logger->info("Finished session ". $session->id);
+            close $session->fh;
+            undef $session;
         };
     }
 
     method run {
+        $_SERVER = $self; # for the debug REPL
         my $loop = async { EV::loop };
         my $debug = Coro::Debug->new_unix_server("/tmp/stylish-debug");
         $loop->prio(3);
