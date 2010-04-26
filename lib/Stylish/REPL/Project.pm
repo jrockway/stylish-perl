@@ -119,7 +119,7 @@ class Stylish::REPL::Project {
 
     method change {
         async {
-            $self->reloading->down;
+            my $guard = $self->reloading->guard;
             my $new_repl = eval { $self->new_repl };
             $self->on_output($@) if $@;
             if($new_repl){
@@ -128,7 +128,6 @@ class Stylish::REPL::Project {
                 $self->inc_repl_version;
                 $self->on_repl_change->($self->get_repl_version);
             }
-            $self->reloading->up;
         };
     }
 
