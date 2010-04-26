@@ -34,12 +34,15 @@ class Stylish::Server::Session {
             },
         }). "\n");
 
+        no warnings 'exiting';
+      line:
         while(my $line = $self->readline("\n")){
             my $cookie = undef;
             try {
                 chomp $line;
                 my $req = decode_json($line);
                 my $cmd = delete $req->{command} || die 'no command?';
+                last line if $cmd eq 'exit'; # we're done
                 $cookie = delete $req->{cookie} || die 'no cookie?';
                 my $result = $self->run_command($cmd, $req);
                 $self->print(encode_json({

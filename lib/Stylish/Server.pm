@@ -42,6 +42,7 @@ class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
             $self->register_session($session);
             $session->run;
             $self->unregister_session($session);
+            $self->logger->info("Finished session ". $session->id);
         };
     }
 
