@@ -25,8 +25,8 @@ my $repl = Stylish::REPL::Project->new(
 );
 
 async {
-    is $repl->push_eval("2 + 2"), '4', 'repl works';
-    is $repl->push_eval("`pwd`"), "$tmp", 'pwd is correct';
+    is $repl->do_eval("2 + 2"), '4', 'repl works';
+    is $repl->do_eval("`pwd`"), "$tmp", 'pwd is correct';
 }->join;
 
 $tmp->touch(
@@ -42,10 +42,10 @@ $tmp->touch(
 is $rchange->recv, '1', 'got next generation REPL';
 
 async {
-    like $repl->push_eval('my $test = Test->new( foo => 42 )'),
+    like $repl->do_eval('my $test = Test->new( foo => 42 )'),
       qr/Test=HASH/,
         'got Test object';
-    is $repl->push_eval('$test->bar'), 'OH HAI: 42', 'the object works!';
+    is $repl->do_eval('$test->bar'), 'OH HAI: 42', 'the object works!';
 }->join;
 
 $rchange = AnyEvent->condvar;
@@ -63,10 +63,10 @@ $tmp->touch(
 is $rchange->recv, '2', 'got next generation REPL';
 
 async {
-    like $repl->push_eval('$test'),
+    like $repl->do_eval('$test'),
       qr/Test=HASH/,
         'we still have the Test object';
-    is $repl->push_eval('$test->bar'), 'Oh, hello: 42', 'the new code took effect!';
+    is $repl->do_eval('$test->bar'), 'Oh, hello: 42', 'the new code took effect!';
 }->join;
 
 done_testing;

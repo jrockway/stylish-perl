@@ -112,16 +112,17 @@ class Stylish::REPL::Project {
 
     method new_repl {
         my $r = AnyEvent::REPL->new;
-        $self->_load_modules_in_repl($r);
+        $self->_load_modules_in_repl($r, 0);
         $self->_transfer_lexenv($self->good_repl, $r);
         return $r;
     }
 
     method change {
         async {
+            $Coro::current->desc("Reloading ". $self->project->root->stringify);
             my $guard = $self->reloading->guard;
             my $new_repl = eval { $self->new_repl };
-            $self->on_output($@) if $@;
+            $self->on_output->($@) if $@;
             if($new_repl){
                 # get lexenv from old repl
                 $self->good_repl($new_repl);
@@ -131,10 +132,13 @@ class Stylish::REPL::Project {
         };
     }
 
-    # not really; we just block until it's done
-    method push_eval(Str $code, Bool $chomp? = 1){
+    method do_eval(Str $code, Bool $chomp? = 1){
         my $result = $self->repl_eval($self->good_repl, $code);
         chomp $result if $chomp;
         return $result;
+    }
+
+    method push_eval(@args){
+        $self->good_repl->push_eval(@args);
     }
 }
