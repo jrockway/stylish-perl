@@ -46,9 +46,10 @@ class Stylish::Server::Session {
         default    => sub { {} },
         traits     => ['Hash'],
         handles => {
-            get_repl => 'get',
-            has_repl => 'exists',
-            add_repl => 'set',
+            get_repl   => 'get',
+            has_repl   => 'exists',
+            add_repl   => 'set',
+            list_repls => 'keys',
         },
     );
 
@@ -117,7 +118,7 @@ class Stylish::Server::Session {
         my $is_success = 0;
         $repl->push_eval(
             $code,
-            on_output => sub { warn "got output: @_"; $on_output->(@_) },
+            on_output => $on_output,
             on_error  => $done,
             on_result => sub { $is_success = 1; $done->(@_) },
         );
@@ -125,16 +126,13 @@ class Stylish::Server::Session {
         return { success => $is_success, result => join('', Coro::rouse_wait) }
     }
 
-    # method write_stdin(Str $repl_name){
-    # }
-
-    # method kill_repl(Str $repl_name){
-    # }
+    method kill_repl(Str $repl_name, Int $sig? = 9){
+        $self->get_repl($repl_name)->kill(9);
+    }
 
     method run_command(Str $cmd, Str $cookie, HashRef $args){
         my $respond_cb = sub {
             my ($cmd, $res) = @_;
-            warn "$cmd output";
             $self->print(encode_json({
                 cookie  => $cookie,
                 result  => $res,
@@ -148,12 +146,20 @@ class Stylish::Server::Session {
                     ($args->{name} || 'default'),
                     ($args->{code} || die 'need code to eval'),
                     sub {
-                        warn "here";
                         $respond_cb->( 'repl_output', {
                             data => join('', @_),
                             repl => ($args->{name} || 'default'),
                         });
                     },
+                );
+            }
+            when('list_repls'){
+                return [$self->list_repls];
+            }
+            when('kill_repl'){
+                return $self->kill_repl(
+                    $args->{name} || die 'need name of repl',
+                    $args->{signal} // 9,
                 );
             }
             default {
