@@ -63,9 +63,9 @@ $tmp->touch(
 is $rchange->recv, '2', 'got next generation REPL';
 
 async {
-    like $repl->push_eval('my $test = Test->new( foo => 42 )'),
+    like $repl->push_eval('$test'),
       qr/Test=HASH/,
-        'got Test object';
+        'we still have the Test object';
     is $repl->push_eval('$test->bar'), 'Oh, hello: 42', 'the new code took effect!';
 }->join;
 

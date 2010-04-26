@@ -6,6 +6,8 @@ class Stylish::REPL::Project {
     use Coro;
     use Coro::Semaphore;
 
+    use File::Temp qw(tempfile);
+
     has 'project' => (
         is       => 'ro',
         isa      => 'Stylish::Project',
@@ -95,9 +97,23 @@ class Stylish::REPL::Project {
         confess "Modules failed to load in the new REPL: $error";
     }
 
+    method _transfer_lexenv(AnyEvent::REPL $from, AnyEvent::REPL $to){
+        my ($fh, $filename) = tempfile();
+        $self->repl_eval(
+            $from,
+            qq{use Storable; Storable::nstore(\$_REPL->lexical_environment, "\Q$filename\E");});
+        $self->repl_eval(
+            $to,
+            qq{use Storable; \$_REPL->{lexical_environment} = Storable::retrieve("\Q$filename\E"); },
+        );
+        close $fh;
+        unlink $filename;
+    }
+
     method new_repl {
         my $r = AnyEvent::REPL->new;
         $self->_load_modules_in_repl($r);
+        $self->_transfer_lexenv($self->good_repl, $r);
         return $r;
     }
 
