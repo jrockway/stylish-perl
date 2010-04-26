@@ -126,6 +126,10 @@ class Stylish::Server::Session {
         return { success => $is_success, result => join('', Coro::rouse_wait) }
     }
 
+    method write_stdin(Str $repl_name, Str $string){
+        $self->get_repl($repl_name)->push_write($string);
+    }
+
     method kill_repl(Str $repl_name, Int $sig? = 9){
         $self->get_repl($repl_name)->kill(9);
     }
@@ -161,6 +165,13 @@ class Stylish::Server::Session {
                     $args->{name} || die 'need name of repl',
                     $args->{signal} // 9,
                 );
+            }
+            when('write_to_repl'){
+                $self->write_stdin(
+                    $args->{name} || 'default',
+                    $args->{input} || die 'need input',
+                );
+                return 1;
             }
             default {
                 die "unknown command '$cmd'";
