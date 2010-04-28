@@ -69,7 +69,8 @@ class Stylish::Server::Session {
 
     method run {
         $self->print(encode_json({
-            welcome => {
+            command => "welcome",
+            result  => {
                 session_id => $self->id,
                 version    => $self->server->VERSION,
             },
