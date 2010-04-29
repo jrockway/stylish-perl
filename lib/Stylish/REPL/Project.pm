@@ -141,4 +141,6 @@ class Stylish::REPL::Project {
     method push_eval(@args){
         $self->good_repl->push_eval(@args);
     }
+
+    method BUILD { $self->change }
 }

@@ -117,6 +117,8 @@ class Stylish::Server::Session {
 
         # kill any in-progress activities
         $_->cancel for @coros;
+        $self->remove_project($_) for $self->list_projects;
+        $self->remove_repl($_) for $self->list_repls;
     }
 
     method project_change(Stylish::Project $project, Str $name){
@@ -242,8 +244,8 @@ class Stylish::Server::Session {
             when('register_project'){
                 my $dir = Path::Class::dir($args->{root} || die 'need root')
                   ->resolve->absolute;
+                my $name = Path::Class::file($dir)->basename;
 
-                my $name = $args->{name} || $dir->basename;
                 return $self->register_project(
                     $name, $dir,
                     sub {
