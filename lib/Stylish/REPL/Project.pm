@@ -3,6 +3,7 @@ use MooseX::Declare;
 class Stylish::REPL::Project {
     use Stylish::Project;
     use AnyEvent::REPL;
+    use AnyEvent::Debounce;
     use Coro;
     use Coro::Semaphore;
 
@@ -14,7 +15,7 @@ class Stylish::REPL::Project {
         required => 1,
         trigger  => sub {
             my ($self, $project) = @_;
-            $project->add_change_hook(sub { $self->change });
+            $project->add_change_hook(sub { $self->change_debounce->send });
         }
     );
 
@@ -44,10 +45,15 @@ class Stylish::REPL::Project {
         default  => sub { sub {} },
     );
 
-    has 'reloading' => (
-        accessor => 'reloading',
-        isa      => 'Coro::Semaphore',
-        default  => sub { Coro::Semaphore->new(1) },
+    has 'change_debounce' => (
+        accessor => 'change_debounce',
+        default  => sub {
+            my $self = shift;
+            return AnyEvent::Debounce->new(
+                delay => 0.1,
+                cb    => sub { $self->change },
+            );
+        },
     );
 
     method _build_good_repl {
@@ -94,7 +100,7 @@ class Stylish::REPL::Project {
         };
         $error = $@ if $@;
         return $repl if defined $result && $result eq '4';
-        confess "Modules failed to load in the new REPL: $error";
+        die "Modules failed to load in the new REPL: $error";
     }
 
     method _transfer_lexenv(AnyEvent::REPL $from, AnyEvent::REPL $to){
@@ -120,7 +126,6 @@ class Stylish::REPL::Project {
     method change {
         async {
             $Coro::current->desc("Reloading ". $self->project->root->stringify);
-            my $guard = $self->reloading->guard;
             my $new_repl = eval { $self->new_repl };
             $self->on_output->($@) if $@;
             if($new_repl){

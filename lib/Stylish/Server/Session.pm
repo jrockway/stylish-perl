@@ -16,6 +16,7 @@ class Stylish::Server::Session {
 
     use Stylish::Project;
     use Stylish::REPL::Project;
+    use Coro::Semaphore;
 
     use feature 'switch';
 
@@ -64,6 +65,17 @@ class Stylish::Server::Session {
             remove_repl => 'delete',
         },
     );
+
+    has 'print_lock' => (
+        accessor => 'print_lock',
+        isa      => 'Coro::Semaphore',
+        default  => sub { Coro::Semaphore->new(1) },
+    );
+
+    around print(@args){
+        my $guard = $self->print_lock->guard;
+        return $self->$orig(@args);
+    }
 
     before get_repl(Str $repl){
         # make REPLs auto-vivify
@@ -150,8 +162,6 @@ class Stylish::Server::Session {
         );
 
         $self->add_repl($name, $repl);
-
-        Scalar::Util::weaken($repl->{project});
 
         $project->add_destroy_hook(sub {
             $self->remove_repl($name);
