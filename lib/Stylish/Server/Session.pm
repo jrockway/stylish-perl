@@ -289,7 +289,7 @@ class Stylish::Server::Session {
                 return $self->unregister_project($root || $name);
             }
             when('list_projects'){
-                return [ $self->list_projects ];
+                return [ map { $_->root->stringify } $self->list_projects ];
             }
             default {
                 die "unknown command '$cmd'";
