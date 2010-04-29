@@ -5,6 +5,7 @@ class Stylish::Server::Session {
     use Stylish::Types qw(REPL);
     use MooseX::Types::Moose qw(HashRef);
     use MooseX::Types::Path::Class qw(Dir);
+    use MooseX::MultiMethods;
 
     use AnyEvent::REPL;
     use Coro;
@@ -44,7 +45,9 @@ class Stylish::Server::Session {
         isa     => 'Set::Object',
         default => sub { Set::Object->new },
         handles => {
-            add_project => 'insert',
+            add_project    => 'insert',
+            list_projects  => 'members',
+            remove_project => 'remove',
         },
     );
 
@@ -54,10 +57,11 @@ class Stylish::Server::Session {
         default    => sub { {} },
         traits     => ['Hash'],
         handles => {
-            get_repl   => 'get',
-            has_repl   => 'exists',
-            add_repl   => 'set',
-            list_repls => 'keys',
+            get_repl    => 'get',
+            has_repl    => 'exists',
+            add_repl    => 'set',
+            list_repls  => 'keys',
+            remove_repl => 'delete',
         },
     );
 
@@ -120,10 +124,20 @@ class Stylish::Server::Session {
         # rebuild tags table
     }
 
-    method register_project(Str $name, Dir $root, CodeRef $on_output, CodeRef $on_repl) {
+    method ensure_project_uniqueness(Str $name, Dir $root){
+        die 'this project is not unique'
+          if grep { $_->root eq $root } $self->list_projects;
+    }
+
+    method register_project(Str $name, Dir $root, CodeRef $on_output, CodeRef $on_repl, CodeRef $on_change) {
+        $self->ensure_project_uniqueness($name, $root);
+
         my $project; $project = Stylish::Project->new(
             root      => $root,
-            on_change => [ sub { $self->project_change($project, $name) } ],
+            on_change => [
+                $on_change,
+                sub { $self->project_change($project, $name) },
+            ],
         );
         $self->add_project($project);
 
@@ -135,7 +149,31 @@ class Stylish::Server::Session {
 
         $self->add_repl($name, $repl);
 
+        Scalar::Util::weaken($repl->{project});
+
+        $project->add_destroy_hook(sub {
+            $self->remove_repl($name);
+        });
+
+        return { root => $root->stringify, name => $name };
+    }
+
+    multi method unregister_project(Stylish::Project $p){
+        $self->remove_project($p);
+        $p->DEMOLISH;
         return 1;
+    }
+
+    multi method unregister_project(Dir $root){
+        for my $project ($self->list_projects) {
+            if ($root && $project->root eq $root) {
+                return $self->unregister_project($project);
+            }
+        }
+    }
+
+    multi method unregister_project(Str $name){
+        $self->unregister_project($self->get_repl($name)->project);
     }
 
     method repl(Str $repl_name, Str $code, CodeRef $on_output){
@@ -202,7 +240,9 @@ class Stylish::Server::Session {
                 return 1;
             }
             when('register_project'){
-                my $dir = Path::Class::dir($args->{root} || die 'need root');
+                my $dir = Path::Class::dir($args->{root} || die 'need root')
+                  ->resolve->absolute;
+
                 my $name = $args->{name} || $dir->basename;
                 return $self->register_project(
                     $name, $dir,
@@ -218,12 +258,29 @@ class Stylish::Server::Session {
                             repl       => $name,
                         });
                     },
+                    sub {
+                        $respond_cb->( 'project_change', {
+                            project => $name,
+                        });
+                    },
                 );
+            }
+            when('unregister_project') {
+                my $name = $args->{name};
+                my $root = $args->{root};
+                die 'need root or name' if !$name && !$root;
+
+                $root = Path::Class::dir($root)->resolve->absolute
+                  if $root;
+
+                return $self->unregister_project($root || $name);
+            }
+            when('list_projects'){
+                return [ $self->list_projects ];
             }
             default {
                 die "unknown command '$cmd'";
             }
         }
     }
-
 }

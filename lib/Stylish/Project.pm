@@ -58,6 +58,16 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
         },
     );
 
+    has 'on_destroy' => (
+        is       => 'ro',
+        traits   => ['Array'],
+        isa      => 'ArrayRef[CodeRef]',
+        default  => sub { [] },
+        handles  => {
+            on_destroy_hooks => 'elements',
+            add_destroy_hook => 'push',
+        },
+    );
 
     multi method _is_library(Dir $file){ return }
 
@@ -133,4 +143,9 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     }
 
     method BUILD { $self->_inotify }
+
+    method DEMOLISH {
+        undef $self->{_inotify};
+        $_->() for $self->on_destroy_hooks;
+    }
 }
