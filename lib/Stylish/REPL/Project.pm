@@ -118,7 +118,7 @@ class Stylish::REPL::Project {
 
     method new_repl {
         my $r = AnyEvent::REPL->new;
-        $self->_load_modules_in_repl($r, 0);
+        $self->_load_modules_in_repl($r, 1);
         $self->_transfer_lexenv($self->good_repl, $r);
         return $r;
     }
@@ -148,4 +148,9 @@ class Stylish::REPL::Project {
     }
 
     method BUILD { $self->change }
+
+    method kill {
+        $self->good_repl->kill;
+        $self->change;
+    }
 }
