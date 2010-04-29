@@ -208,8 +208,9 @@ class Stylish::Server::Session {
         $self->get_repl($repl_name)->push_write($string);
     }
 
-    method kill_repl(Str $repl_name, Int $sig? = 9){
-        $self->get_repl($repl_name)->kill(9);
+    method kill_repl(Str $repl_name, Int $sig){
+        $self->get_repl($repl_name)->kill($sig);
+        return 1;
     }
 
     method run_command(Str $cmd, Str $cookie, HashRef $args){
@@ -240,14 +241,14 @@ class Stylish::Server::Session {
             }
             when('kill_repl'){
                 return $self->kill_repl(
-                    $args->{name} || die 'need name of repl',
-                    $args->{signal} // 9,
+                    ($args->{name} || die 'need name of repl'),
+                    ($args->{signal} // 9),
                 );
             }
             when('write_to_repl'){
                 $self->write_stdin(
                     $args->{name} || 'default',
-                    $args->{input} || die 'need input',
+                    ($args->{input} || die 'need input'),
                 );
                 return 1;
             }

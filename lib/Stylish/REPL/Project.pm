@@ -149,8 +149,8 @@ class Stylish::REPL::Project {
 
     method BUILD { $self->change }
 
-    method kill {
-        $self->good_repl->kill;
+    method kill(Int $num? = 9) {
+        $self->good_repl->kill($num);
         $self->change;
     }
 }
