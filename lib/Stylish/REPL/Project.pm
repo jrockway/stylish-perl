@@ -58,8 +58,15 @@ class Stylish::REPL::Project {
 
     method make_repl {
         return AnyEvent::REPL->new(
-            loop_traits    => ['Stylish::REPL::Trait::TransferLexenv'],
-            capture_stderr => 1,
+            capture_stderr  => 1,
+            loop_traits     => ['Stylish::REPL::Trait::TransferLexenv'],
+            backend_plugins => [
+                '+Devel::REPL::Plugin::DDS',
+                '+Devel::REPL::Plugin::LexEnv',
+                '+Devel::REPL::Plugin::Packages',
+                '+Devel::REPL::Plugin::ResultNames',
+                '+Devel::REPL::Plugin::InstallResult',
+            ],
         );
     }
 
