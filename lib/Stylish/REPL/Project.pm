@@ -56,15 +56,21 @@ class Stylish::REPL::Project {
         },
     );
 
+    method make_repl {
+        return AnyEvent::REPL->new(
+            loop_traits    => ['Stylish::REPL::Trait::TransferLexenv'],
+            capture_stderr => 1,
+        );
+    }
+
     method _build_good_repl {
-        my $r = AnyEvent::REPL->new;
+        my $r = $self->make_repl;
         async { $self->_setup_repl_pwd($r) }->join;
         return $r;
     }
 
     method repl_eval(AnyEvent::REPL $repl, Str $code) {
         my $cb = Coro::rouse_cb;
-        #warn "eval $code";
         $repl->push_eval(
             $code,
             on_output => $self->on_output,
@@ -76,6 +82,18 @@ class Stylish::REPL::Project {
         confess "REPL error: @result" if $status eq 'error';
         return @result if wantarray;
         return join '', @result;
+    }
+
+    method repl_command(AnyEvent::REPL $repl, Str $command, HashRef $args) {
+        my $cb = Coro::rouse_cb;
+        $repl->push_command(
+            $command, $args,
+            on_result => sub { $cb->( result => $_[0] ) },
+            on_error  => sub { $cb->( error  => $_[0] ) },
+        );
+        my ($status, $result) = Coro::rouse_wait;
+        confess "Command error: $result" if $status eq 'error';
+        return $result;
     }
 
     method _setup_repl_pwd(AnyEvent::REPL $repl){
@@ -105,19 +123,16 @@ class Stylish::REPL::Project {
 
     method _transfer_lexenv(AnyEvent::REPL $from, AnyEvent::REPL $to){
         my ($fh, $filename) = tempfile();
-        $self->repl_eval(
-            $from,
-            qq{use Storable; Storable::nstore(\$_REPL->lexical_environment, "\Q$filename\E");});
-        $self->repl_eval(
-            $to,
-            qq{use Storable; \$_REPL->{lexical_environment} = Storable::retrieve("\Q$filename\E"); },
-        );
+
+        $self->repl_command($from, 'save_state', { filename => $filename });
+        $self->repl_command($to, 'restore_state', { filename => $filename });
+
         close $fh;
         unlink $filename;
     }
 
     method new_repl {
-        my $r = AnyEvent::REPL->new;
+        my $r = $self->make_repl;
         $self->_load_modules_in_repl($r, 1);
         $self->_transfer_lexenv($self->good_repl, $r);
         return $r;
@@ -129,7 +144,6 @@ class Stylish::REPL::Project {
             my $new_repl = eval { $self->new_repl };
             $self->on_output->($@) if $@;
             if($new_repl){
-                # get lexenv from old repl
                 $self->good_repl($new_repl);
                 $self->inc_repl_version;
                 $self->on_repl_change->($self->get_repl_version);
