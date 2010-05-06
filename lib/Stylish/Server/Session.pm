@@ -17,6 +17,7 @@ class Stylish::Server::Session {
     use Stylish::Project;
     use Stylish::REPL::Project;
     use Coro::Semaphore;
+    use Data::Visitor::Callback;
 
     use feature 'switch';
 
@@ -213,12 +214,26 @@ class Stylish::Server::Session {
         return 1;
     }
 
+    multi method shorten(HashRef $hash){
+        my $v = Data::Visitor::Callback->new(
+            plain_value => sub { return $self->shorten($_[1]) },
+        );
+        return $v->visit($hash);
+    }
+
+    multi method shorten(Str $str) {
+        return $str if length $str < 2000; # 80 x 25
+        return (substr $str, 0, 2000)."...\n";
+    }
+
+    multi method shorten(Any $any) { return $any }
+
     method run_command(Str $cmd, Str $cookie, HashRef $args){
         my $respond_cb = sub {
             my ($cmd, $res) = @_;
             $self->print(encode_json({
                 cookie  => $cookie,
-                result  => $res,
+                result  => $self->shorten($res),
                 command => $cmd,
             })."\n");
         };

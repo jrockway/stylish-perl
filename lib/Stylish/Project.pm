@@ -2,12 +2,14 @@ use MooseX::Declare;
 
 class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     use AnyEvent::Inotify::Simple;
+    use Devel::InPackage;
+    use File::Next::Filtered qw(files);
     use MooseX::FileAttribute;
     use MooseX::MultiMethods;
-    use Devel::InPackage;
-    use Scalar::Util qw(weaken);
-    use File::Next::Filtered qw(files);
     use MooseX::Types::Path::Class qw(File Dir);
+    use Path::Filter::Rule::Glob;
+    use Path::Filter;
+    use Scalar::Util qw(weaken);
 
     has_directory 'root' => (
         must_exist => 1,
@@ -28,6 +30,29 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
         $_->(@args) for $self->on_change_hooks;
     }
 
+    has 'filter' => (
+        is         => 'ro',
+        isa        => 'Path::Filter',
+        lazy_build => 1,
+    );
+
+    method _build_filter {
+        my $f = Path::Filter->new(
+            root  => $self->root,
+            rules => [qw/Backup VersionControl EditorJunk/],
+        );
+
+        # $f->add_filter( Path::Filter::Rule::Glob->new(
+        #     glob => 'blib/*',
+        # ));
+
+        # $f->add_filter( Path::Filter::Rule::Glob->new(
+        #     glob => 'inc/*',
+        # ));
+
+        return $f;
+    }
+
     has 'inotify' => (
         reader     => '_inotify',
         isa        => 'AnyEvent::Inotify::Simple',
@@ -38,6 +63,7 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
         my $i = AnyEvent::Inotify::Simple->new(
             directory      => $self->root,
             event_receiver => $self,
+            filter         => $self->filter,
         );
 
         weaken $i->{event_receiver};
@@ -73,25 +99,34 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
 
     multi method _is_library(File $file) {
         return unless $file =~ /[.]pm$/;
-        return unless $file =~ /lib\W/;
+        return unless $file =~ /\blib\b/;
+
+        warn $file;
+        # skip blib, inc, and t
+        return if $file =~ /^blib\b/;
+        return if $file =~ /^inc\b/;
+        return if $file =~ /^t\b/;
         return 1;
     }
 
-    around _add_library(File|Dir $lib, ArrayRef $val){
+    around _add_library(File $lib, ArrayRef $val){
         return unless $self->_is_library($lib);
         $self->$orig($lib, $val);
     }
 
     method extract_library_modules(File $file) {
         my %packages;
-        Devel::InPackage::scan(
-            file     => $file->absolute($self->root)->stringify,
-            callback => sub { $packages{$_[1]}++; 1 },
-        );
+        eval {
+            Devel::InPackage::scan(
+                file     => $file->absolute($self->root)->stringify,
+                callback => sub { $packages{$_[1]}++; 1 },
+            );
+        }; # sometimes files don't stay around long enough for this to work
         return [ grep { $_ ne 'main' } keys %packages ];
     }
 
-    method add_library(File $lib){
+    method add_library(File|Dir $lib){
+        return if ! -f $lib;
         $self->_add_library($lib, $self->extract_library_modules($lib));
     }
 
@@ -107,7 +142,7 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
         # normally, Inotify::Simple filters everything, but the first
         # time around, we do it ourselves
         my $i = files(
-            { filters => [qw/Backup VersionControl EditorJunk/] },
+            { filter => $self->filter },
             $self->root,
         );
 
@@ -124,20 +159,20 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     method handle_close {}
     method handle_open {}
 
-    method handle_create(File $file) {
+    method handle_create(File|Dir $file) {
         $self->add_library($file);
         $self->run_on_change($file);
     }
 
-    method handle_move(File $file) {
+    method handle_move(File|Dir $file, @args) {
         $self->run_on_change($file);
     }
 
-    method handle_modify(File $file) {
+    method handle_modify(File|Dir $file) {
         $self->run_on_change($file);
     }
 
-   method handle_delete(File $file) {
+   method handle_delete(File|Dir $file) {
         $self->delete_library($file);
         $self->run_on_change($file);
     }
