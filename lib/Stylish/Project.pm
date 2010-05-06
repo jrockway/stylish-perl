@@ -101,11 +101,8 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
         return unless $file =~ /[.]pm$/;
         return unless $file =~ /\blib\b/;
 
-        warn $file;
         # skip blib, inc, and t
-        return if $file =~ /^blib\b/;
-        return if $file =~ /^inc\b/;
-        return if $file =~ /^t\b/;
+        return if $file =~ /^(blib|inc|t)\b/;
         return 1;
     }
 
@@ -126,7 +123,7 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     }
 
     method add_library(File|Dir $lib){
-        return if ! -f $lib;
+        return unless -f $lib->absolute($self->root);
         $self->_add_library($lib, $self->extract_library_modules($lib));
     }
 
@@ -164,8 +161,10 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
         $self->run_on_change($file);
     }
 
-    method handle_move(File|Dir $file, @args) {
-        $self->run_on_change($file);
+    method handle_move(File|Dir $old, File|Dir $new) {
+        $self->run_on_change($new);
+        $self->delete_library($old);
+        $self->add_library($new);
     }
 
     method handle_modify(File|Dir $file) {
