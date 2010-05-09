@@ -2,13 +2,14 @@ use MooseX::Declare;
 
 class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
     use AnyEvent::Socket;
-    use EV;
-    use Coro;
-    use Coro::EV;
     use Coro::Debug;
+    use Coro::EV;
     use Coro::Handle;
-    use Stylish::Server::Session;
+    use Coro;
+    use EV;
     use Set::Object;
+    use Stylish::Server::Session;
+    use Stylish::Types qw(Components);
 
     our $VERSION = '0.00_01';
     our $_SERVER;
@@ -28,6 +29,28 @@ class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
         },
     );
 
+    has 'components' => (
+        is         => 'ro',
+        isa        => Components,
+        coerce     => 1,
+        lazy_build => 1,
+        traits     => ['Array'],
+        handles    => {
+            get_components => 'elements',
+        },
+    );
+
+    method visit_components(CodeRef $code) {
+        for my $component ($self->get_components){
+            $code->($component);
+        }
+    }
+
+    method _build_components {
+        return [ 'REPL', 'Project' ];
+
+    }
+
     method _build_server {
         return tcp_server 'unix/', '/tmp/stylish', sub { $self->run_session($_[0]) };
     }
@@ -40,9 +63,11 @@ class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
             );
             $self->logger->info("New connection ". $session->id);
             $Coro::current->desc("Stylish session ". $session->id);
+            $self->visit_components(sub { $_[0]->SESSION($session) });
             $self->register_session($session);
             $session->run;
             $self->unregister_session($session);
+            $self->visit_components(sub { $_[0]->UNSESSION($session) });
             $self->logger->info("Finished session ". $session->id);
             close $session->fh;
             undef $session;
@@ -55,7 +80,10 @@ class Stylish::Server with (MooseX::LogDispatch, MooseX::Runnable) {
         my $debug = Coro::Debug->new_unix_server("/tmp/stylish-debug");
         $loop->prio(3);
         $self->server;
+        $self->visit_components(sub { $_[0]->SERVER($self) });
         $self->logger->debug("Server listening on /tmp/stylish");
         schedule;
+        $self->visit_components(sub { $_[0]->UNSERVER($self) });
+        return 0;
     }
 }
