@@ -77,7 +77,7 @@ class Stylish::Server::Component::REPL with Stylish::Server::Component {
             on_result => sub { $is_success = 1; $done->(@_) },
             on_output => sub { $response_cb->('repl_output', {
                 data => join('', @_),
-                name => $name,
+                repl => $name,
             })},
         );
 

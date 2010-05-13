@@ -34,15 +34,15 @@ class Stylish::REPL::Project {
     );
 
     has 'on_output' => (
-        is       => 'ro',
-        isa      => 'CodeRef',
-        default  => sub { sub {} },
+        is      => 'ro',
+        isa     => 'CodeRef',
+        default => sub { sub {} },
     );
 
     has 'on_repl_change' => (
-        is       => 'ro',
-        isa      => 'CodeRef',
-        default  => sub { sub {} },
+        is      => 'ro',
+        isa     => 'CodeRef',
+        default => sub { sub {} },
     );
 
     has 'change_debounce' => (
