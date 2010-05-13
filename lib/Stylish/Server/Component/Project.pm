@@ -1,13 +1,15 @@
 use MooseX::Declare;
 
 class Stylish::Server::Component::Project with Stylish::Server::Component {
-    use MooseX::Types::Moose qw(Str);
+    use MooseX::Types::Moose qw(Str Maybe);
     use MooseX::Types::Path::Class qw(Dir);
 
     use Set::Object;
 
     use Stylish::Project;
+    use Stylish::Project::Constrained;
     use Stylish::REPL::Project;
+    use Stylish::Server::Component::REPL;
 
     method SERVER {}
     method UNSERVER {}
@@ -20,7 +22,8 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
             method   => 'register_project',
             requires => ['repl', 'response_cb'],
             args     => {
-                root => Str,
+                root       => Str,
+                subproject => Maybe[Str],
             },
         });
 
@@ -43,23 +46,23 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
         },
     );
 
-    method project_change(Stylish::Project $project, Str $name){
+    sub project_change { #(Stylish::Project $project, Str $name){
         # git snapshot
         # rebuild tags table
     }
 
-    method ensure_project_uniqueness(Str $name, Dir $root){
-        die 'this project is not unique'
-          if grep { $_->root->stringify eq $root } $self->list_projects;
-    }
-
-    method register_project(Str :$root, CodeRef :$response_cb, :repl($repls)) {
+    method register_project( Str :$root, Str :$subproject?,
+                             CodeRef :$response_cb,
+                             Stylish::Server::Component::REPL :repl($repls) ){
         $root = Path::Class::dir($root);
         my $name = Path::Class::file($root)->basename;
+        $name .= "/$subproject" if defined $subproject;
 
-        $self->ensure_project_uniqueness($name, $root);
-
-        my $project; $project = Stylish::Project->new(
+        my $class = $subproject && -e $root->file('.stylish.yml') ?
+                    'Stylish::Project::Constrained' :
+                    'Stylish::Project';
+        my $project; $project = $class->new(
+            defined $subproject ? (name => $subproject) : (),
             root      => $root,
             on_change => [
                 sub {
@@ -72,7 +75,7 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
         );
         $self->add_project($project);
 
-        my $new_repl = Stylish::REPL::Project->new(
+        my $repl = Stylish::REPL::Project->new(
             project        => $project,
             on_output      => sub {
                 $response_cb->('repl_output', {
@@ -88,11 +91,12 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
             },
         );
 
-        $repls->add_repl($name, $new_repl);
+        $repls->add_repl($name, $repl);
 
         $project->add_destroy_hook(sub {
             $repls->remove_repl($name);
             $self->remove_project($project);
+            undef $project;
         });
 
         return { root => $root->stringify, name => $name };

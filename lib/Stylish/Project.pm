@@ -179,7 +179,7 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     method BUILD { $self->_inotify }
 
     method DEMOLISH {
-        undef $self->{_inotify};
+        $self->_inotify->DEMOLISH;
         $_->() for $self->on_destroy_hooks;
     }
 }
