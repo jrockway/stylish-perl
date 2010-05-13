@@ -99,7 +99,11 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
             undef $project;
         });
 
-        return { root => $root->stringify, name => $name };
+        return {
+            root       => $root->stringify,
+            name       => $name,
+            subproject => eval { $project->name },
+        };
     }
 
     method unregister_project(Str :$root){

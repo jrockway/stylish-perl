@@ -36,7 +36,8 @@ class Stylish::Project::Constrained extends Stylish::Project {
     );
 
     method _build_library_regexp {
-        my $re = $self->project->{library_regexp} || '.*';
+        my $re = $self->project->{library_regexp} ||
+                 $self->project->{library_regex}  || '.*';
         return qr{$re};
     }
 
