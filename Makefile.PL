@@ -10,6 +10,7 @@ requires 'AnyEvent::REPL';
 requires 'AnyEvent::Term';
 requires 'Coro';
 requires 'Sub::AliasedUnderscore';
+requires 'MooseX::Declare';
 
 test_requires 'Test::More';
 test_requires 'Test::Exception';
