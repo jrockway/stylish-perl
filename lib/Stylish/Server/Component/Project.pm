@@ -33,6 +33,13 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
             method => 'unregister_project',
             args   => { root => Str },
         });
+
+        $session->register_command({
+            name => 'refresh',
+            object => $self,
+            method => 'refresh_project',
+            args   => { root => Str },
+        });
     }
 
     has 'project_set' => (
@@ -102,22 +109,34 @@ class Stylish::Server::Component::Project with Stylish::Server::Component {
         return {
             root       => $root->stringify,
             name       => $name,
-            subproject => eval { $project->name },
+            subproject => (eval { $project->name } || undef), # avoid warning
         };
     }
 
-    method unregister_project(Str :$root){
+    method find_project(Str $root){
         $root = Path::Class::dir($root)->absolute->resolve->stringify;
         for my $project ($self->list_projects) {
             if ($project->root->stringify eq $root) {
-                $project->DEMOLISH;
-                return 1;
+                return $project;
             }
         }
-        return 0;
+        return;
+    }
+
+    method unregister_project(Str :$root){
+        my $p = $self->find_project($root);
+        return 0 unless $root;
+        $p->DEMOLISH;
+        return 1;
     }
 
     # multi method unregister_project(Str :$name){
     #     $self->unregister_project($self->get_repl($name)->project);
     # }
+
+    method refresh_project(Str :$root){
+        my $p = $self->find_project($root);
+        return 0 unless $root;
+        $p->run_on_change();
+    }
 }
