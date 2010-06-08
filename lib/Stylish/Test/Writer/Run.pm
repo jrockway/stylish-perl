@@ -1,19 +1,18 @@
 use MooseX::Declare;
 
 # export test script to eval'd TAP
-class Stylish::Test::Writer::Run {
+class Stylish::Test::Writer::Run with AnyEvent::REPL::API::Sync {
     use AnyEvent::REPL;
-    use Stylish::Types qw(REPL);
+    use AnyEvent::REPL::Types qw(SyncREPL);
     use Coro::Util::Rouse qw(rouse_cb rouse_wait);
     use TAP::Parser;
 
     has 'repl' => (
         is         => 'ro',
-        isa        => REPL,
+        isa        => SyncREPL,
         lazy_build => 1,
-        handles    => {
-            _push_eval => 'push_eval',
-        },
+        coerce     => 1,
+        handles    => 'AnyEvent::REPL::API::Sync',
     );
 
     has 'tap_accumulator' => (
@@ -34,22 +33,13 @@ class Stylish::Test::Writer::Run {
         $self->run_use_command('Test::More');
     }
 
-    method push_eval(Str $code){
-        my ($ok, $err) = rouse_cb;
-        # print "# $code\n";
-        $self->_push_eval(
-            $code,
-            on_output => sub { $self->accumulate_tap( $_[0] ) if $_[0] },
-            on_error  => $err,
-            on_result => $ok,
-        );
-
-        return rouse_wait;
+    around do_eval(@args){
+        $self->$orig(@args, on_output => sub { $self->accumulate_tap($_[0]) });
     }
 
     method run(ArrayRef $script){
-        $self->push_eval('delete $_REPL->{lexical_environment}');
-        $self->push_eval('Test::Builder->new->reset');
+        $self->do_eval('delete $_REPL->{lexical_environment}');
+        $self->do_eval('Test::Builder->new->reset');
         $self->clear_tap_accumulator;
 
         for my $step (@$script) {
@@ -58,7 +48,7 @@ class Stylish::Test::Writer::Run {
             $self->run_command(@$step);
         }
 
-        $self->push_eval('done_testing');
+        $self->do_eval('done_testing');
 
         my $parser = TAP::Parser->new({
             tap => $self->captured_tap,
@@ -82,18 +72,18 @@ class Stylish::Test::Writer::Run {
 
     method run_use_command(Str $module, Str $args?){
         $args ||= "";
-        $self->push_eval("use $module $args");
+        $self->do_eval("use $module $args");
     }
 
     method run_bind_command(Str $var, Any $val) {
-        $self->push_eval("my $var = ". $self->escape_for_eval($val));
+        $self->do_eval("my $var = ". $self->escape_for_eval($val));
     }
 
     method run_set_command(Str $var, Any $val) {
-        $self->push_eval("$var = ". $self->escape_for_eval($val));
+        $self->do_eval("$var = ". $self->escape_for_eval($val));
     }
 
     method run_test_command(Str $got_var, Any $expected) {
-        $self->push_eval("is_deeply $got_var, ". $self->escape_for_eval($expected));
+        $self->do_eval("is_deeply $got_var, ". $self->escape_for_eval($expected));
     }
 }

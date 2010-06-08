@@ -1,9 +1,10 @@
 use MooseX::Declare;
 
-class Stylish::REPL::Project {
+class Stylish::REPL::Project
+  with (AnyEvent::REPL::API::Sync, AnyEvent::REPL::API::Async) {
     use Stylish::Project;
     use AnyEvent::REPL;
-    use AnyEvent::REPL::Types qw(REPL);
+    use AnyEvent::REPL::Types qw(SyncREPL AsyncREPL);
     use AnyEvent::REPL::CoroWrapper;
     use AnyEvent::Debounce;
     use Coro;
@@ -31,7 +32,8 @@ class Stylish::REPL::Project {
 
     has 'good_repl' => (
         is         => 'rw',
-        isa        => REPL,
+        isa        => SyncREPL,
+        handles    => 'AnyEvent::REPL::API::Sync',
         lazy_build => 1,
     );
 
@@ -78,50 +80,63 @@ class Stylish::REPL::Project {
 
     method _build_good_repl {
         my $r = $self->make_repl;
-        async { $self->_setup_repl_pwd($r) }->join;
+        $self->_setup_repl_pwd($r);
         return $r;
     }
 
-    method repl_eval(REPL $repl, Str $code) {
-        my @result = $repl->do_eval($code, on_output => $self->on_output);
-        return @result if wantarray;
-        return join '', @result;
+    around do_eval(@args){
+        my $result = $self->$orig(@args);
+        chomp $result;
+        return $result;
     }
 
-    method repl_command(REPL $repl, Str $command, HashRef $args) {
-        return $repl->do_command($command, $args);
+    method push_eval(@args) {
+        my $good_repl = $self->good_repl;
+        return $good_repl->can('push_eval') ?
+          $good_repl->push_eval(@args)      :
+          $good_repl->repl->push_eval(@args);
     }
 
-    method _setup_repl_pwd(REPL $repl){
+    method push_command(@args) {
+        my $good_repl = $self->good_repl;
+        return $good_repl->can('push_command') ?
+          $good_repl->push_command(@args)      :
+          $good_repl->repl->push_command(@args);
+    }
+
+
+    after kill { $self->change }
+
+    method _setup_repl_pwd(SyncREPL $repl){
         my $dir = $self->project->root->resolve->absolute;
         my $lib = $dir->subdir('lib');
-        $self->repl_eval($repl, qq{chdir "\Q$dir\E";});
-        $self->repl_eval($repl, qq{use lib "\Q$lib\E"});
+        $repl->do_eval(qq{chdir "\Q$dir\E";});
+        $repl->do_eval(qq{use lib "\Q$lib\E"});
     }
 
-    method _load_modules_in_repl(REPL $repl, Bool $strict_load? = 1){
+    method _load_modules_in_repl(SyncREPL $repl, Bool $strict_load? = 1){
         my @modules = $self->project->get_libraries;
         my $error = 'unknown error';
         my $result = eval {
             $self->_setup_repl_pwd($repl);
             if ($strict_load) {
-                $self->repl_eval($repl, qq{require "\Q$_\E"}) for @modules;
+                $repl->do_eval(qq{require "\Q$_\E"}) for @modules;
             }
             else {
-                $self->repl_eval($repl, qq{eval { require "\Q$_\E" }}) for @modules;
+                $repl->do_eval(qq{eval { require "\Q$_\E" }}) for @modules;
             }
-            return $self->repl_eval($repl, qq{2 + 2});
+            return $repl->do_eval(qq{2 + 2});
         };
         $error = $@ if $@;
         return $repl if defined $result && $result eq '4';
         die "Modules failed to load in the new REPL: $error";
     }
 
-    method _transfer_lexenv(REPL $from, REPL $to){
+    method _transfer_lexenv(SyncREPL $from, SyncREPL $to){
         my ($fh, $filename) = tempfile();
 
-        $self->repl_command($from, 'save_state', { filename => $filename });
-        $self->repl_command($to, 'restore_state', { filename => $filename });
+        $from->do_command( 'save_state',    { filename => $filename } );
+        $to->do_command(   'restore_state', { filename => $filename } );
 
         close $fh;
         unlink $filename;
@@ -147,20 +162,5 @@ class Stylish::REPL::Project {
         };
     }
 
-    method do_eval(Str $code, Bool $chomp? = 1){
-        my $result = $self->repl_eval($self->good_repl, $code);
-        chomp $result if $chomp;
-        return $result;
-    }
-
-    method push_eval(@args){
-        $self->good_repl->push_eval(@args);
-    }
-
     method BUILD { $self->change }
-
-    method kill(Int $num? = 9) {
-        $self->good_repl->kill($num);
-        $self->change;
-    }
 }

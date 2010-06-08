@@ -1,6 +1,6 @@
 use MooseX::Declare;
 
-class Stylish::Test::REPL {
+class Stylish::Test::REPL with AnyEvent::REPL::API::Sync {
     use Stylish::Test::Recorder;
     use Coro;
     use Storable;
@@ -56,11 +56,6 @@ class Stylish::Test::REPL {
         return Stylish::Test::Recorder->new;
     }
 
-    method push_eval(Str $code, CodeRef :$on_output?){
-        $on_output ||= sub {};
-        return $self->do_eval($code, on_output => $on_output);
-    }
-
     method test_eval(Str $code, CodeRef :$on_output?){
         $on_output ||= sub {};
 
@@ -68,7 +63,7 @@ class Stylish::Test::REPL {
         $self->do_command( save_state => { filename => $filename } );
         my $lexenv = retrieve($filename)->{context}{_};
 
-        my $result = $self->push_eval($code, on_output => $on_output);
+        my $result = $self->do_eval($code, on_output => $on_output);
         $self->do_one_test($lexenv, $code, $result);
         return $result;
     }

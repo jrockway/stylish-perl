@@ -2,12 +2,14 @@ use MooseX::Declare;
 
 class Stylish::Server::Component::REPL with Stylish::Server::Component {
     use MooseX::Types::Moose qw(Str Maybe HashRef Int);
-    use Stylish::Types qw(REPL);
+    use AnyEvent::REPL::Types qw(SyncREPL);
     use AnyEvent::REPL;
+    use AnyEvent::REPL::CoroWrapper;
+    use Try::Tiny;
 
     has 'repls' => (
         is         => 'ro',
-        isa        => HashRef[REPL],
+        isa        => HashRef[SyncREPL],
         default    => sub { +{} },
         traits     => ['Hash'],
         handles    => {
@@ -18,6 +20,15 @@ class Stylish::Server::Component::REPL with Stylish::Server::Component {
             remove_repl => 'delete',
         },
     );
+
+    around add_repl(Str $name, $repl){
+        return $self->$orig(
+            $name,
+            $repl->does('AnyEvent::REPL::API::Async')
+              ? AnyEvent::REPL::CoroWrapper->new( repl => $repl )
+              : $repl,
+        );
+    }
 
     before get_repl(Str $repl_name){
         # make REPLs auto-vivify
@@ -69,19 +80,20 @@ class Stylish::Server::Component::REPL with Stylish::Server::Component {
     method repl_eval(Str :$name, Str :$code, CodeRef :$response_cb){
         my $repl = $self->get_repl($name);
 
-        my $done = Coro::rouse_cb;
         my $is_success = 0;
-        $repl->push_eval(
-            $code,
-            on_error  => $done,
-            on_result => sub { $is_success = 1; $done->(@_) },
-            on_output => sub { $response_cb->('repl_output', {
-                data => join('', @_),
-                repl => $name,
-            })},
-        );
+        my $result = try {
+            my $r = $repl->do_eval(
+                $code,
+                on_output => sub { $response_cb->('repl_output', {
+                    data => join('', @_),
+                    repl => $name,
+                })},
+            );
+            $is_success = 1;
+            return $r;
+        } catch { $_ };
 
-        return { success => $is_success, result => join('', Coro::rouse_wait) };
+        return { success => $is_success, result => $result };
     }
 
     method write_stdin(Str :$name, Str :$input){

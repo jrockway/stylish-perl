@@ -8,7 +8,7 @@ use Stylish::Server::Component::REPL;
 my $repls = Stylish::Server::Component::REPL->new;
 
 async {
-    isa_ok $repls->get_repl('test'), 'AnyEvent::REPL';
+    isa_ok $repls->get_repl('test'), 'AnyEvent::REPL::CoroWrapper';
     is_deeply $repls->repl_eval(
         name        => 'new_repl',
         code        => '2 + 2',

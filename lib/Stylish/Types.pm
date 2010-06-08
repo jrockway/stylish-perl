@@ -2,13 +2,11 @@ package Stylish::Types;
 use strict;
 use warnings;
 
-use MooseX::Types -declare => [qw/REPL Type Command Component Components/];
+use MooseX::Types -declare => [qw/Type Command Component Components/];
 use MooseX::Types::Moose qw(CodeRef HashRef ArrayRef Str Object);
 use MooseX::Types::Structured qw(Dict Optional);
 
 class_type Type, { class => 'Moose::Meta::TypeConstraint' };
-
-duck_type REPL, ['push_eval'];
 
 subtype Command, as Dict[
     name     => Str,

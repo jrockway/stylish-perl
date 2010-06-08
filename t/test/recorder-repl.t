@@ -10,7 +10,7 @@ my $repl = Stylish::Test::REPL->new;
 ok $repl;
 
 async {
-    $repl->push_eval('my $foo = 42');
+    $repl->do_eval('my $foo = 42');
     $repl->test_eval('$foo + 1');
     $repl->test_eval('$foo == 42');
 }->join;
