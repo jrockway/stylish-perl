@@ -3,6 +3,8 @@ use MooseX::Declare;
 class Stylish::REPL::Project {
     use Stylish::Project;
     use AnyEvent::REPL;
+    use AnyEvent::REPL::Types qw(REPL);
+    use AnyEvent::REPL::CoroWrapper;
     use AnyEvent::Debounce;
     use Coro;
     use Coro::Semaphore;
@@ -29,7 +31,7 @@ class Stylish::REPL::Project {
 
     has 'good_repl' => (
         is         => 'rw',
-        isa        => 'AnyEvent::REPL',
+        isa        => REPL,
         lazy_build => 1,
     );
 
@@ -57,7 +59,7 @@ class Stylish::REPL::Project {
     );
 
     method make_repl {
-        return AnyEvent::REPL->new(
+        my $repl = AnyEvent::REPL->new(
             capture_stderr  => 1,
             loop_traits     => ['Stylish::REPL::Trait::TransferLexenv'],
             backend_plugins => [
@@ -68,6 +70,10 @@ class Stylish::REPL::Project {
                 '+Devel::REPL::Plugin::InstallResult',
             ],
         );
+
+        return AnyEvent::REPL::CoroWrapper->new(
+            repl => $repl,
+        );
     }
 
     method _build_good_repl {
@@ -76,41 +82,24 @@ class Stylish::REPL::Project {
         return $r;
     }
 
-    method repl_eval(AnyEvent::REPL $repl, Str $code) {
-        my $cb = Coro::rouse_cb;
-        $repl->push_eval(
-            $code,
-            on_output => $self->on_output,
-            on_result => sub { $cb->( result => @_ ) },
-            on_error  => sub { $cb->( error  => @_ ) },
-        );
-        my @result = Coro::rouse_wait;
-        my $status = shift @result;
-        confess "REPL error: @result" if $status eq 'error';
+    method repl_eval(REPL $repl, Str $code) {
+        my @result = $repl->do_eval($code, on_output => $self->on_output);
         return @result if wantarray;
         return join '', @result;
     }
 
-    method repl_command(AnyEvent::REPL $repl, Str $command, HashRef $args) {
-        my $cb = Coro::rouse_cb;
-        $repl->push_command(
-            $command, $args,
-            on_result => sub { $cb->( result => $_[0] ) },
-            on_error  => sub { $cb->( error  => $_[0] ) },
-        );
-        my ($status, $result) = Coro::rouse_wait;
-        confess "Command error: $result" if $status eq 'error';
-        return $result;
+    method repl_command(REPL $repl, Str $command, HashRef $args) {
+        return $repl->do_command($command, $args);
     }
 
-    method _setup_repl_pwd(AnyEvent::REPL $repl){
+    method _setup_repl_pwd(REPL $repl){
         my $dir = $self->project->root->resolve->absolute;
         my $lib = $dir->subdir('lib');
         $self->repl_eval($repl, qq{chdir "\Q$dir\E";});
         $self->repl_eval($repl, qq{use lib "\Q$lib\E"});
     }
 
-    method _load_modules_in_repl(AnyEvent::REPL $repl, Bool $strict_load? = 1){
+    method _load_modules_in_repl(REPL $repl, Bool $strict_load? = 1){
         my @modules = $self->project->get_libraries;
         my $error = 'unknown error';
         my $result = eval {
@@ -128,7 +117,7 @@ class Stylish::REPL::Project {
         die "Modules failed to load in the new REPL: $error";
     }
 
-    method _transfer_lexenv(AnyEvent::REPL $from, AnyEvent::REPL $to){
+    method _transfer_lexenv(REPL $from, REPL $to){
         my ($fh, $filename) = tempfile();
 
         $self->repl_command($from, 'save_state', { filename => $filename });
