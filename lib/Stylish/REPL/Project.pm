@@ -3,9 +3,8 @@ use MooseX::Declare;
 class Stylish::REPL::Project
   with (AnyEvent::REPL::API::Sync, AnyEvent::REPL::API::Async) {
     use Stylish::Project;
-    use AnyEvent::REPL;
+    use Stylish::REPL::Factory qw(new_repl);
     use AnyEvent::REPL::Types qw(SyncREPL AsyncREPL);
-    use AnyEvent::REPL::CoroWrapper;
     use AnyEvent::Debounce;
     use Coro;
     use Coro::Semaphore;
@@ -61,21 +60,9 @@ class Stylish::REPL::Project
     );
 
     method make_repl {
-        my $repl = AnyEvent::REPL->new(
-            capture_stderr  => 1,
-            loop_traits     => ['Stylish::REPL::Trait::TransferLexenv'],
-            backend_plugins => [
-                '+Devel::REPL::Plugin::DDS',
-                '+Devel::REPL::Plugin::LexEnv',
-                '+Devel::REPL::Plugin::Packages',
-                '+Devel::REPL::Plugin::ResultNames',
-                '+Devel::REPL::Plugin::InstallResult',
-            ],
-        );
-
-        return AnyEvent::REPL::CoroWrapper->new(
-            repl => $repl,
-        );
+        return new_repl {
+            sync => 1,
+        }
     }
 
     method _build_good_repl {

@@ -5,7 +5,6 @@ class Stylish::Server::Session {
     use MooseX::Types::Path::Class qw(Dir);
     use MooseX::MultiMethods;
 
-    use AnyEvent::REPL;
     use Coro;
     use Coro::Semaphore;
     use JSON;

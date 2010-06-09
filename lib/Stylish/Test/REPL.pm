@@ -4,9 +4,8 @@ class Stylish::Test::REPL with AnyEvent::REPL::API::Sync {
     use Stylish::Test::Recorder;
     use Coro;
     use Storable;
-    use AnyEvent::REPL;
+    use Stylish::REPL::Factory qw(new_repl);
     use AnyEvent::REPL::Types qw(REPL SyncREPL);
-    use AnyEvent::REPL::CoroWrapper;
     use File::Temp qw(tempfile);
     use File::Slurp qw(read_file);
 
@@ -30,22 +29,7 @@ class Stylish::Test::REPL with AnyEvent::REPL::API::Sync {
         lazy_build => 1,
     );
 
-    method _build_repl {
-        return AnyEvent::REPL->new(
-            capture_stderr  => 1,
-            loop_traits     => ['Stylish::REPL::Trait::TransferLexenv'],
-            backend_plugins => [
-                '+Devel::REPL::Plugin::DDS',
-                '+Devel::REPL::Plugin::LexEnv',
-                '+Devel::REPL::Plugin::Packages',
-                '+Devel::REPL::Plugin::ResultNames', # TODO: need to
-                                                     # get the
-                                                     # $TESTWHATEVER
-                                                     # name for this.
-                '+Devel::REPL::Plugin::InstallResult',
-            ],
-        );
-    }
+    method _build_repl { new_repl {} }
 
     method _build_wrapped_repl {
         return $self->repl if $self->repl->does('AnyEvent::REPL::API::SyncREPL');

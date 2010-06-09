@@ -3,9 +3,9 @@ use MooseX::Declare;
 class Stylish::Server::Component::REPL with Stylish::Server::Component {
     use MooseX::Types::Moose qw(Str Maybe HashRef Int);
     use AnyEvent::REPL::Types qw(SyncREPL);
-    use AnyEvent::REPL;
-    use AnyEvent::REPL::CoroWrapper;
+    use Stylish::REPL::Factory qw(new_repl);
     use Try::Tiny;
+    use AnyEvent::REPL::CoroWrapper;
 
     has 'repls' => (
         is         => 'ro',
@@ -32,7 +32,7 @@ class Stylish::Server::Component::REPL with Stylish::Server::Component {
 
     before get_repl(Str $repl_name){
         # make REPLs auto-vivify
-        $self->add_repl($repl_name, AnyEvent::REPL->new)
+        $self->add_repl($repl_name, new_repl { sync => 1 })
           if !$self->has_repl($repl_name);
     }
 
