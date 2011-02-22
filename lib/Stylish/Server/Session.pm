@@ -174,9 +174,9 @@ class Stylish::Server::Session {
                         $self->run_command(
                             $cmd, $req, $respond_cb,
                         );
-                    } $error_cb;
+                    } catch { $error_cb->($_) };
                 };
-            } $error_cb;
+            } catch { $error_cb->($_) };
         }
 
         # kill any in-progress activities
