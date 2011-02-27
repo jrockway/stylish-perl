@@ -42,6 +42,13 @@ class Stylish::Server::Component::REPL with Stylish::Server::Component {
 
     method SESSION($session) {
         $session->provide( repl => $self );
+
+        $session->register_command({
+            name     => 'repl_prompt',
+            object   => $self,
+            method   => 'repl_prompt',
+        });
+
         $session->register_command({
             name     => 'repl',
             object   => $self,
@@ -94,6 +101,10 @@ class Stylish::Server::Component::REPL with Stylish::Server::Component {
         } catch { $_ };
 
         return { success => $is_success, result => $result };
+    }
+
+    method repl_prompt(){
+        return { prompt => 'PERL>' }
     }
 
     method write_stdin(Str :$name, Str :$input){
