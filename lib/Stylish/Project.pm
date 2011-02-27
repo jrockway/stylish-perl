@@ -3,13 +3,11 @@ use MooseX::Declare;
 class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     use AnyEvent::Inotify::Simple;
     use Devel::InPackage;
-    use File::Next::Filtered qw(files);
     use MooseX::FileAttribute;
     use MooseX::MultiMethods;
     use MooseX::Types::Path::Class qw(File Dir);
-    use Path::Filter::Rule::Glob;
-    use Path::Filter;
     use Scalar::Util qw(weaken);
+    use File::Next;
 
     has_directory 'root' => (
         must_exist => 1,
@@ -32,25 +30,16 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
 
     has 'filter' => (
         is         => 'ro',
-        isa        => 'Path::Filter',
+        isa        => 'CodeRef',
         lazy_build => 1,
     );
 
     method _build_filter {
-        my $f = Path::Filter->new(
-            root  => $self->root,
-            rules => [qw/Backup VersionControl EditorJunk/],
-        );
-
-        # $f->add_filter( Path::Filter::Rule::Glob->new(
-        #     glob => 'blib/*',
-        # ));
-
-        # $f->add_filter( Path::Filter::Rule::Glob->new(
-        #     glob => 'inc/*',
-        # ));
-
-        return $f;
+        return sub {
+            my $file = shift;
+            return $file if $file =~ /.git/;
+            return;
+        };
     }
 
     has 'inotify' => (
@@ -138,13 +127,12 @@ class Stylish::Project with AnyEvent::Inotify::EventReceiver {
     method _build_libraries {
         # normally, Inotify::Simple filters everything, but the first
         # time around, we do it ourselves
-        my $i = files(
-            { filter => $self->filter },
-            $self->root,
-        );
+        my $i = File::Next::files($self->root);
 
         my @result;
         while(my $file = $i->()){
+            $file = Path::Class::File->new($file);
+            next if $self->filter->($file);
             $file = $file->relative($self->root);
             push @result, $file if $self->_is_library($file);
         }
